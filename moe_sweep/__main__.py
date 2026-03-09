@@ -60,13 +60,13 @@ def main():
         from pathlib import Path
         from .runner import run_sweep_for_k
 
-        model_name = args.model_name or Path(config.model_base_path).name
-
         # Run each k sequentially (each needs its own vLLM instance)
         # If multiple GPUs provided, assign round-robin
         for i, k in enumerate(ks):
             variant_path = str(Path(config.model_base_path) / "variants" / f"ept{k}")
             port = config.vllm_base_port + i
+            # vLLM registers the model by its full path
+            model_name = args.model_name or variant_path
 
             # Assign GPUs round-robin if provided
             k_gpus = None

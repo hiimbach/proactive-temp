@@ -31,6 +31,7 @@ def start_vllm(
     cmd = [
         "vllm", "serve", str(variant_path),
         "--port", str(port),
+        "--enable-prefix-caching",
     ]
     if gpu_ids and len(gpu_ids) > 1:
         cmd.extend(["--tensor-parallel-size", str(len(gpu_ids))])
