@@ -1,0 +1,8 @@
+torch
+datasets
+peft
+trl
+vllm
+loguru
+wandb
+unsloth
