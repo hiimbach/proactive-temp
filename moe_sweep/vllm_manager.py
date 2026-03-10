@@ -39,7 +39,7 @@ def start_vllm(
         cmd.extend(extra_args)
 
     print(f"Starting vLLM: {' '.join(cmd)}")
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmd, env=env)
 
     # Wait for health check
     url = f"http://localhost:{port}/health"

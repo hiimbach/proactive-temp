@@ -1,6 +1,9 @@
 import asyncio
 
 from openai import AsyncOpenAI
+from tqdm import tqdm
+
+CHUNK_SIZE = 50
 
 
 async def generate_n(
@@ -11,23 +14,47 @@ async def generate_n(
     model: str,
     semaphore: asyncio.Semaphore,
     max_tokens: int = 1024,
+    sub_progress: tqdm | None = None,
 ) -> list[str]:
     """Generate N completions for a prompt using vLLM's OpenAI-compatible API.
 
     Uses the `n` parameter for efficient batched multi-sample generation.
+    If n > CHUNK_SIZE, splits into chunks and updates sub_progress bar.
     """
     client = AsyncOpenAI(base_url=f"http://localhost:{port}/v1", api_key="dummy")
 
-    async with semaphore:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            n=n,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+    async def _call(batch_n: int) -> list[str]:
+        async with semaphore:
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    n=batch_n,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                return [choice.message.content or "" for choice in response.choices]
+            except Exception as e:
+                print(f"\nGeneration error (n={batch_n}): {e}")
+                return [""] * batch_n
 
-    return [choice.message.content or "" for choice in response.choices]
+    if n <= CHUNK_SIZE:
+        results = await _call(n)
+        if sub_progress:
+            sub_progress.update(n)
+        return results
+
+    # Split into chunks for sub-progress
+    all_results = []
+    remaining = n
+    while remaining > 0:
+        chunk = min(CHUNK_SIZE, remaining)
+        results = await _call(chunk)
+        all_results.extend(results)
+        remaining -= chunk
+        if sub_progress:
+            sub_progress.update(chunk)
+    return all_results
 
 
 async def generate_batch(
@@ -55,14 +82,27 @@ async def generate_batch(
     """
     semaphore = asyncio.Semaphore(max_concurrent)
     results = {}
+    total_generations = len(prompts) * n
+    show_sub = n > CHUNK_SIZE
 
-    async def _gen(idx: int, prompt: str):
-        generations = await generate_n(prompt, n, temperature, port, model, semaphore, max_tokens)
-        results[idx] = generations
+    if show_sub:
+        pbar = tqdm(total=total_generations, desc=f"Generating (t={temperature}, n={n})", unit="gen")
 
-    tasks = [_gen(idx, prompt) for idx, prompt in prompts]
+        async def _gen(idx: int, prompt: str):
+            generations = await generate_n(prompt, n, temperature, port, model, semaphore, max_tokens, sub_progress=pbar)
+            results[idx] = generations
 
-    from tqdm.asyncio import tqdm_asyncio
-    await tqdm_asyncio.gather(*tasks, desc=f"Generating (t={temperature}, n={n})")
+        tasks = [_gen(idx, prompt) for idx, prompt in prompts]
+        await asyncio.gather(*tasks)
+        pbar.close()
+    else:
+        async def _gen(idx: int, prompt: str):
+            generations = await generate_n(prompt, n, temperature, port, model, semaphore, max_tokens)
+            results[idx] = generations
+
+        tasks = [_gen(idx, prompt) for idx, prompt in prompts]
+
+        from tqdm.asyncio import tqdm_asyncio
+        await tqdm_asyncio.gather(*tasks, desc=f"Generating (t={temperature}, n={n})")
 
     return results
