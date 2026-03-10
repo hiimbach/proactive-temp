@@ -32,6 +32,7 @@ def main():
     parser.add_argument("--model-name", type=str, default=None, help="Model name for vLLM API (auto-detected from config if not set)")
     parser.add_argument("--vllm-args", type=str, default=None, help="Extra vLLM args (space-separated)")
     parser.add_argument("-n", type=int, default=None, help="Override n_samples")
+    parser.add_argument("--no-vllm", action="store_true", help="Skip vLLM start/stop (assume already running)")
 
     args = parser.parse_args()
     config = load_sweep_config(args.config)
@@ -80,6 +81,7 @@ def main():
             asyncio.run(run_sweep_for_k(
                 config, k, variant_path, port, model_name,
                 gpu_ids=k_gpus, mode=args.mode, vllm_extra_args=vllm_extra,
+                no_vllm=args.no_vllm,
             ))
 
     elif args.command == "judge":
