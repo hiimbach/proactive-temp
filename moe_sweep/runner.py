@@ -58,12 +58,16 @@ async def run_sweep_for_k(
     gpu_ids: list[int] | None = None,
     mode: str = "separate",
     vllm_extra_args: list[str] | None = None,
+    no_vllm: bool = False,
 ) -> None:
     """Run the full temperature sweep for a single routing-k value.
 
     Starts vLLM, generates for all temperatures, then stops vLLM.
+    If no_vllm=True, assumes vLLM is already running externally.
     """
-    proc = start_vllm(variant_path, port, gpu_ids, extra_args=vllm_extra_args)
+    proc = None
+    if not no_vllm:
+        proc = start_vllm(variant_path, port, gpu_ids, extra_args=vllm_extra_args)
     try:
         samples = load_implicature_samples(config)
         quantity_prompt_tpl = load_prompt(config.prompt_quantity_path)
@@ -101,7 +105,8 @@ async def run_sweep_for_k(
 
             print(f"Done: k={routing_k} t={temp} mode={mode} -> {out_path}")
     finally:
-        stop_vllm(proc)
+        if proc:
+            stop_vllm(proc)
 
 
 async def _run_separate(
